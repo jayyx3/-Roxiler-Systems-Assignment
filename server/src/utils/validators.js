@@ -63,7 +63,7 @@ export const adminCreateStoreRules = [
   body('name')
     .trim()
     .notEmpty().withMessage('Store name is required.')
-    .isLength({ min: 2, max: 60 }).withMessage('Store name must be between 2 and 60 characters.'), // Note: prompt specifies "name: varchar(60) required" for stores, let's keep name length standard (min 2, max 60) for stores unless strictly enforced, but let's check prompt: "stores table: name varchar(60) required", it didn't specify min 20 for stores, only for users table. Let's make it min 2 max 60. Wait, prompt says: "Name: required, min 20 characters, max 60 characters." in validation rules. Let's enforce min 20 max 60 for stores too, to be 100% safe and fully aligned. Let's enforce it on BOTH to be absolutely strict: name: min 20 max 60. Let's write that.
+    .isLength({ min: 20, max: 60 }).withMessage('Store name must be between 20 and 60 characters.'),
   
   body('email')
     .trim()

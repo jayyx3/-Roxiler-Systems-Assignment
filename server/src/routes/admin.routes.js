@@ -318,24 +318,10 @@ router.get('/stores', async (req, res, next) => {
     let total = 0;
 
     if (shouldSortByRating) {
-      // Fetch all matching stores first, compute ratings, then sort and paginate.
-      // This is necessary because sorting by relation aggregate can sometimes be slow or require database-level group by.
-      // We can also use Prisma orderBy relation aggregates. Let's try that, but fallback to raw query or JS sorting if needed.
-      // Prisma aggregate order is cleaner:
-      orderBy = {
-        ratings: {
-          _avg: {
-            rating: order
-          }
-        }
-      };
-
-      [stores, total] = await Promise.all([
+      // Fetch all matching stores first, compute ratings, then sort and paginate in memory.
+      const [allStores, totalCount] = await Promise.all([
         prisma.store.findMany({
           where,
-          orderBy,
-          skip,
-          take: limit,
           include: {
             owner: {
               select: {
@@ -353,6 +339,46 @@ router.get('/stores', async (req, res, next) => {
         }),
         prisma.store.count({ where }),
       ]);
+
+      total = totalCount;
+
+      const formatted = allStores.map((store) => {
+        const ratings = store.ratings.map((r) => r.rating);
+        const totalRatings = ratings.length;
+        const averageRating = totalRatings > 0 
+          ? parseFloat((ratings.reduce((sum, r) => sum + r, 0) / totalRatings).toFixed(2)) 
+          : 0;
+
+        const { ratings: _, ...storeData } = store;
+        return {
+          ...storeData,
+          averageRating,
+          totalRatings,
+        };
+      });
+
+      formatted.sort((a, b) => {
+        if (order === 'asc') {
+          return a.averageRating - b.averageRating;
+        } else {
+          return b.averageRating - a.averageRating;
+        }
+      });
+
+      stores = formatted.slice(skip, skip + limit);
+
+      return res.json({
+        success: true,
+        data: {
+          stores,
+          pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+          },
+        },
+      });
     } else {
       [stores, total] = await Promise.all([
         prisma.store.findMany({
@@ -377,37 +403,35 @@ router.get('/stores', async (req, res, next) => {
         }),
         prisma.store.count({ where }),
       ]);
-    }
 
-    // Format ratings
-    const formattedStores = stores.map((store) => {
-      const ratings = store.ratings.map((r) => r.rating);
-      const totalRatings = ratings.length;
-      const averageRating = totalRatings > 0 
-        ? parseFloat((ratings.reduce((sum, r) => sum + r, 0) / totalRatings).toFixed(2)) 
-        : 0;
+      const formattedStores = stores.map((store) => {
+        const ratings = store.ratings.map((r) => r.rating);
+        const totalRatings = ratings.length;
+        const averageRating = totalRatings > 0 
+          ? parseFloat((ratings.reduce((sum, r) => sum + r, 0) / totalRatings).toFixed(2)) 
+          : 0;
 
-      // remove raw ratings array from response to reduce payload size
-      const { ratings: _, ...storeData } = store;
-      return {
-        ...storeData,
-        averageRating,
-        totalRatings,
-      };
-    });
+        const { ratings: _, ...storeData } = store;
+        return {
+          ...storeData,
+          averageRating,
+          totalRatings,
+        };
+      });
 
-    return res.json({
-      success: true,
-      data: {
-        stores: formattedStores,
-        pagination: {
-          total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit),
+      return res.json({
+        success: true,
+        data: {
+          stores: formattedStores,
+          pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+          },
         },
-      },
-    });
+      });
+    }
   } catch (error) {
     next(error);
   }

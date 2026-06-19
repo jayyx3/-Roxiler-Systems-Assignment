@@ -14,7 +14,7 @@ export default async function authenticate(req, res, next) {
     const token = authHeader.split(' ')[1];
     
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_jwt_key_change_me_1234567890');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     // Check if user still exists in database
     const user = await prisma.user.findUnique({

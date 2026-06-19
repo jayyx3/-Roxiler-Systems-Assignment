@@ -42,70 +42,125 @@ router.get('/', async (req, res, next) => {
 
     if (sortBy === 'rating') {
       sortByRating = true;
-      orderBy = {
-        ratings: {
-          _avg: {
-            rating: sortOrder,
-          },
-        },
-      };
     } else if (['name', 'address'].includes(sortBy)) {
       orderBy[sortBy] = sortOrder;
     } else {
       orderBy = { name: 'asc' };
     }
 
-    const [stores, total] = await Promise.all([
-      prisma.store.findMany({
-        where,
-        orderBy,
-        skip,
-        take: limit,
-        include: {
-          ratings: {
-            select: {
-              userId: true,
-              rating: true,
+    let stores = [];
+    let total = 0;
+
+    if (sortByRating) {
+      const [allStores, totalCount] = await Promise.all([
+        prisma.store.findMany({
+          where,
+          include: {
+            ratings: {
+              select: {
+                userId: true,
+                rating: true,
+              },
             },
           },
+        }),
+        prisma.store.count({ where }),
+      ]);
+
+      total = totalCount;
+
+      const formatted = allStores.map((store) => {
+        const allRatings = store.ratings.map((r) => r.rating);
+        const totalRatings = allRatings.length;
+        const overallRating = totalRatings > 0
+          ? parseFloat((allRatings.reduce((sum, r) => sum + r, 0) / totalRatings).toFixed(2))
+          : 0;
+
+        const userRatingRecord = store.ratings.find((r) => r.userId === userId);
+        const userSubmittedRating = userRatingRecord ? userRatingRecord.rating : null;
+
+        const { ratings: _, ...storeData } = store;
+        return {
+          ...storeData,
+          overallRating,
+          totalRatings,
+          userSubmittedRating,
+        };
+      });
+
+      formatted.sort((a, b) => {
+        if (sortOrder === 'asc') {
+          return a.overallRating - b.overallRating;
+        } else {
+          return b.overallRating - a.overallRating;
+        }
+      });
+
+      stores = formatted.slice(skip, skip + limit);
+
+      return res.json({
+        success: true,
+        data: {
+          stores,
+          pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+          },
         },
-      }),
-      prisma.store.count({ where }),
-    ]);
+      });
+    } else {
+      [stores, total] = await Promise.all([
+        prisma.store.findMany({
+          where,
+          orderBy,
+          skip,
+          take: limit,
+          include: {
+            ratings: {
+              select: {
+                userId: true,
+                rating: true,
+              },
+            },
+          },
+        }),
+        prisma.store.count({ where }),
+      ]);
 
-    // Format output including user rating
-    const formattedStores = stores.map((store) => {
-      const allRatings = store.ratings.map((r) => r.rating);
-      const totalRatings = allRatings.length;
-      const overallRating = totalRatings > 0
-        ? parseFloat((allRatings.reduce((sum, r) => sum + r, 0) / totalRatings).toFixed(2))
-        : 0;
+      const formattedStores = stores.map((store) => {
+        const allRatings = store.ratings.map((r) => r.rating);
+        const totalRatings = allRatings.length;
+        const overallRating = totalRatings > 0
+          ? parseFloat((allRatings.reduce((sum, r) => sum + r, 0) / totalRatings).toFixed(2))
+          : 0;
 
-      const userRatingRecord = store.ratings.find((r) => r.userId === userId);
-      const userSubmittedRating = userRatingRecord ? userRatingRecord.rating : null;
+        const userRatingRecord = store.ratings.find((r) => r.userId === userId);
+        const userSubmittedRating = userRatingRecord ? userRatingRecord.rating : null;
 
-      // remove raw ratings array from response
-      const { ratings: _, ...storeData } = store;
-      return {
-        ...storeData,
-        overallRating,
-        totalRatings,
-        userSubmittedRating,
-      };
-    });
+        const { ratings: _, ...storeData } = store;
+        return {
+          ...storeData,
+          overallRating,
+          totalRatings,
+          userSubmittedRating,
+        };
+      });
 
-    return res.json({
-      success: true,
-      data: {
-        stores: formattedStores,
-        pagination: {
-          total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit),
+      return res.json({
+        success: true,
+        data: {
+          stores: formattedStores,
+          pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+          },
         },
-      },
-    });
+      });
+    }
   } catch (error) {
     next(error);
   }
