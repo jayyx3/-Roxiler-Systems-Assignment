@@ -1,6 +1,6 @@
 # Store Rating Platform - Production Ready Monorepo
 
-A complete, production-quality, responsive web application for rating and reviewing stores. Built with **Express.js (Node.js)**, **Prisma ORM with PostgreSQL**, and **React (Vite + Tailwind CSS v4)**.
+A complete, production-quality, responsive web application for rating and reviewing stores. Built with **Express.js (Node.js)**, **Prisma ORM with PostgreSQL**, and React (Vite + Tailwind CSS v4).
 
 This application implements role-based access control (RBAC) supporting three distinct user profiles:
 1. **System Administrator:** Oversees platform statistics, user registration, and store assignments.
